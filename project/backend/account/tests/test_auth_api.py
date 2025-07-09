@@ -219,3 +219,57 @@ def test_change_password_invalid_old_password():
     assert response.status_code == status.HTTP_400_BAD_REQUEST
     assert not user.check_password(payload['new_password'])
 
+
+
+LOGOUT_URL = reverse('account:logout')
+
+@pytest.mark.django_db
+def test_logout_success():
+    """Тест: успешный logout (blacklist refresh токена)"""
+    # Создаем пользователя и логинимся
+    user = CustomUser.objects.create_user(
+        email='logout@example.com',
+        password='LogoutPass123',
+        name='Logout User'
+    )
+    client = APIClient()
+    token_response = client.post(reverse('account:token_obtain_pair'), {
+        'email': user.email,
+        'password': 'LogoutPass123'
+    })
+    refresh_token = token_response.data['refresh']
+
+    # Делаем logout (blacklist refresh токена)
+    response = client.post(LOGOUT_URL, {'refresh': refresh_token})
+
+    assert response.status_code == status.HTTP_205_RESET_CONTENT
+    
+    
+    
+    
+@pytest.mark.django_db
+def test_logout_invalid_refresh_token():
+    """Тест: logout с невалидным refresh токеном должен вернуть 400"""
+    client = APIClient()
+    invalid_refresh_token = "this.is.not.a.valid.token"
+    response = client.post(LOGOUT_URL, {'refresh': invalid_refresh_token})
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert 'detail' in response.data
+    assert response.data['detail'] == 'Token is blacklisted or invalid'
+    
+    
+    
+    
+@pytest.mark.django_db
+def test_logout_without_refresh_token():
+    """Тест: logout без refresh токена должен вернуть 400"""
+    client = APIClient()
+    response = client.post(LOGOUT_URL, {})  # пустое тело запроса
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert 'detail' in response.data
+    assert response.data['detail'] == 'Refresh token is required'
+
+
+
